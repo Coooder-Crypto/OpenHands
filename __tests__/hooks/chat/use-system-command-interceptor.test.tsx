@@ -5,12 +5,16 @@ import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store"
 import { useEventStore } from "#/stores/use-event-store";
 
 const {
+  mockCondenseConversation,
   mockDisplayErrorToast,
+  mockDisplaySuccessToast,
   mockRefetchHooks,
   mockRefetchSettings,
   mockRefetchSkills,
 } = vi.hoisted(() => ({
+  mockCondenseConversation: vi.fn(),
   mockDisplayErrorToast: vi.fn(),
+  mockDisplaySuccessToast: vi.fn(),
   mockRefetchHooks: vi.fn(),
   mockRefetchSettings: vi.fn(),
   mockRefetchSkills: vi.fn(),
@@ -74,8 +78,13 @@ vi.mock("#/hooks/query/use-settings", () => ({
   }),
 }));
 
+vi.mock("#/hooks/mutation/conversation-mutation-utils", () => ({
+  condenseConversation: mockCondenseConversation,
+}));
+
 vi.mock("#/utils/custom-toast-handlers", () => ({
   displayErrorToast: mockDisplayErrorToast,
+  displaySuccessToast: mockDisplaySuccessToast,
 }));
 
 vi.mock("react-i18next", () => ({
@@ -102,6 +111,7 @@ describe("useSystemCommandInterceptor", () => {
     mockRefetchSkills.mockResolvedValue({ data: skills, isError: false });
     mockRefetchHooks.mockResolvedValue({ data: hooks, isError: false });
     mockRefetchSettings.mockResolvedValue({ data: settings, isError: false });
+    mockCondenseConversation.mockResolvedValue(undefined);
     useEventStore.getState().clearEvents();
     useSlashCommandOutputStore.getState().clearAll();
   });
@@ -131,6 +141,7 @@ describe("useSystemCommandInterceptor", () => {
             "/help",
             "/feedback",
             "/skills",
+            "/condense",
             "/code-search",
           ]),
         );
@@ -255,6 +266,61 @@ describe("useSystemCommandInterceptor", () => {
       "noopener,noreferrer",
     );
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // @spec SC-005 — Conversation condensation
+  it("condenses the active conversation and reports success", async () => {
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
+    );
+
+    act(() => result.current("/condense"));
+
+    await waitFor(() => {
+      expect(mockCondenseConversation).toHaveBeenCalledWith(CONVERSATION_ID);
+      expect(mockDisplaySuccessToast).toHaveBeenCalledWith(
+        "SLASH_COMMAND$CONDENSE_SUCCESS",
+      );
+    });
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  // @spec SC-005 — Conversation condensation
+  it.each([404, 405, 501])(
+    "reports unsupported condensation for an HTTP %s response",
+    async (status) => {
+      mockCondenseConversation.mockRejectedValueOnce({ response: { status } });
+      const onSubmit = vi.fn();
+      const { result } = renderHook(() =>
+        useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
+      );
+
+      act(() => result.current("/condense"));
+
+      await waitFor(() => {
+        expect(mockDisplayErrorToast).toHaveBeenCalledWith(
+          "SLASH_COMMAND$CONDENSE_UNSUPPORTED",
+        );
+      });
+    },
+  );
+
+  // @spec SC-005 — Conversation condensation
+  it("uses the localized generic message for other condensation failures", async () => {
+    mockCondenseConversation.mockRejectedValueOnce(new Error("private detail"));
+    const onSubmit = vi.fn();
+    const { result } = renderHook(() =>
+      useSystemCommandInterceptor(CONVERSATION_ID, onSubmit),
+    );
+
+    act(() => result.current("/condense"));
+
+    await waitFor(() => {
+      expect(mockDisplayErrorToast).toHaveBeenCalledWith(
+        "SLASH_COMMAND$CONDENSE_FAILED",
+      );
+    });
   });
 
   it("passes ordinary messages through unchanged", () => {
