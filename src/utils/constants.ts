@@ -49,6 +49,8 @@ export const HELP_COMMAND = "/help";
 
 export const FEEDBACK_COMMAND = "/feedback";
 
+export const SKILLS_COMMAND = "/skills";
+
 export const FEEDBACK_FORM_URL = "https://forms.gle/chHc5VdS3wty5DwW6";
 
 /** Built-in slash commands surfaced in the menu for V1 conversations. */
@@ -114,6 +116,16 @@ export const BUILT_IN_COMMANDS: SlashCommandItem[] = [
     },
     command: FEEDBACK_COMMAND,
     descriptionKey: I18nKey.SLASH_COMMAND$FEEDBACK_DESCRIPTION,
+  },
+  {
+    skill: {
+      name: "skills",
+      type: "agentskills",
+      content: "List skills available in the current workspace",
+      triggers: [SKILLS_COMMAND],
+    },
+    command: SKILLS_COMMAND,
+    descriptionKey: I18nKey.SLASH_COMMAND$SKILLS_DESCRIPTION,
   },
 ];
 

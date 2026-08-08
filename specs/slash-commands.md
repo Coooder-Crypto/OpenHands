@@ -14,6 +14,13 @@
 - [x] Built-in commands shall have localized descriptions, and help shall mention the `/` autocomplete menu.
 - [x] Built-in help shall remain available when the skill catalog cannot be refreshed.
 
+### SC-003: Loaded extensions
+
+- [x] `/skills` shall render workspace skills, conversation hooks, and enabled MCP servers in the chat area.
+- [x] Disabled MCP servers shall not be presented as loaded.
+- [x] The output shall remain anchored to the event that preceded the command.
+- [x] A failed hooks or settings refresh shall not hide extension data that is still available from other sources.
+
 ### SC-004: Feedback
 
 - [x] `/feedback` shall open the anonymous feedback form in a protected new browser tab without sending a user message to the agent.
