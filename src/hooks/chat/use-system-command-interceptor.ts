@@ -3,18 +3,22 @@ import { useTranslation } from "react-i18next";
 import { getLastRenderableEventId } from "#/hooks/chat/model-command-event-anchor";
 import { buildSlashCommandItems } from "#/hooks/chat/use-slash-command";
 import { useConversationSkills } from "#/hooks/query/use-conversation-skills";
+import { useConversationHooks } from "#/hooks/query/use-conversation-hooks";
+import { useSettings } from "#/hooks/query/use-settings";
 import { useSlashCommandOutputStore } from "#/stores/slash-command-output-store";
 import {
   HELP_COMMAND,
   FEEDBACK_COMMAND,
   FEEDBACK_FORM_URL,
+  SKILLS_COMMAND,
 } from "#/utils/constants";
 import { displayErrorToast } from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
+import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
 
 /**
  * Intercepts browser-local utility commands. These commands never reach the
- * agent as user messages; help produces an anchored inline chat card and
+ * agent as user messages; help and skills produce anchored inline chat cards,
  * feedback opens an external form.
  */
 export function useSystemCommandInterceptor(
@@ -23,14 +27,21 @@ export function useSystemCommandInterceptor(
 ) {
   const { t } = useTranslation("openhands");
   const { data: skills, refetch: refetchSkills } = useConversationSkills();
-  const showHelp = useSlashCommandOutputStore((state) => state.showHelp);
+  const { data: hooks, refetch: refetchHooks } =
+    useConversationHooks(conversationId);
+  const { data: settings, refetch: refetchSettings } = useSettings();
+  const store = useSlashCommandOutputStore();
+  const showHelp = store.showHelp;
+  const showSkills = store.showSkills;
 
   return useCallback(
     (message: string) => {
       const command = message.trim();
-      const isSystemCommand = [HELP_COMMAND, FEEDBACK_COMMAND].includes(
-        command,
-      );
+      const isSystemCommand = [
+        HELP_COMMAND,
+        FEEDBACK_COMMAND,
+        SKILLS_COMMAND,
+      ].includes(command);
       if (!isSystemCommand) {
         onSubmit(message);
         return;
@@ -49,20 +60,63 @@ export function useSystemCommandInterceptor(
         return;
       }
 
-      // @spec SC-002 — Inline help
       const anchorEventId = getLastRenderableEventId();
-      refetchSkills()
-        .then((result) => {
-          showHelp(
-            conversationId,
-            anchorEventId,
-            buildSlashCommandItems(
-              result.isError ? (skills ?? []) : (result.data ?? skills ?? []),
-            ),
-          );
+
+      // @spec SC-002 — Inline help
+      if (command === HELP_COMMAND) {
+        refetchSkills()
+          .then((result) => {
+            showHelp(
+              conversationId,
+              anchorEventId,
+              buildSlashCommandItems(
+                result.isError ? (skills ?? []) : (result.data ?? skills ?? []),
+              ),
+            );
+          })
+          .catch(() => displayErrorToast(t(I18nKey.ERROR$GENERIC)));
+        return;
+      }
+
+      // @spec SC-003 — Loaded extensions
+      Promise.all([refetchSkills(), refetchHooks(), refetchSettings()])
+        .then(([skillsResult, hooksResult, settingsResult]) => {
+          const currentSkills = skillsResult.isError
+            ? (skills ?? [])
+            : (skillsResult.data ?? skills ?? []);
+          const currentHooks = hooksResult.isError
+            ? (hooks ?? [])
+            : (hooksResult.data ?? hooks ?? []);
+          const currentSettings = settingsResult.isError
+            ? settings
+            : (settingsResult.data ?? settings);
+          const mcpConfig = currentSettings?.mcp_config;
+          const mcpServers = mcpConfig
+            ? flattenMcpConfig(mcpConfig).filter(
+                (server) => server.enabled !== false,
+              )
+            : [];
+
+          showSkills(conversationId, anchorEventId, {
+            skills: currentSkills,
+            hooks: currentHooks,
+            mcpServers,
+          });
         })
         .catch(() => displayErrorToast(t(I18nKey.ERROR$GENERIC)));
     },
-    [conversationId, onSubmit, refetchSkills, showHelp, skills, t],
+    [
+      conversationId,
+      hooks,
+      onSubmit,
+      refetchHooks,
+      refetchSettings,
+      refetchSkills,
+      settings?.mcp_config,
+      showHelp,
+      showSkills,
+      skills,
+      t,
+    ],
   );
 }
