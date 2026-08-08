@@ -24,3 +24,8 @@
 ### SC-004: Feedback
 
 - [x] `/feedback` shall open the anonymous feedback form in a protected new browser tab without sending a user message to the agent.
+
+### SC-005: Conversation condensation
+
+- [x] `/condense` shall request condensation through the typed conversation client.
+- [x] Backends returning HTTP 404, 405, or 501 shall produce a localized unsupported message; other failures shall produce a localized generic failure.

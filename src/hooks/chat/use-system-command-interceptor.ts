@@ -11,10 +11,27 @@ import {
   FEEDBACK_COMMAND,
   FEEDBACK_FORM_URL,
   SKILLS_COMMAND,
+  CONDENSE_COMMAND,
 } from "#/utils/constants";
-import { displayErrorToast } from "#/utils/custom-toast-handlers";
+import {
+  displayErrorToast,
+  displaySuccessToast,
+} from "#/utils/custom-toast-handlers";
 import { I18nKey } from "#/i18n/declaration";
 import { flattenMcpConfig } from "#/utils/mcp-installed-servers";
+import { condenseConversation } from "#/hooks/mutation/conversation-mutation-utils";
+
+const CONDENSE_UNSUPPORTED_STATUS_CODES = new Set([404, 405, 501]);
+
+function getHttpStatus(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null) return undefined;
+  const directStatus = (error as { status?: unknown }).status;
+  if (typeof directStatus === "number") return directStatus;
+  const response = (error as { response?: unknown }).response;
+  if (typeof response !== "object" || response === null) return undefined;
+  const responseStatus = (response as { status?: unknown }).status;
+  return typeof responseStatus === "number" ? responseStatus : undefined;
+}
 
 /**
  * Intercepts browser-local utility commands. These commands never reach the
@@ -41,6 +58,7 @@ export function useSystemCommandInterceptor(
         HELP_COMMAND,
         FEEDBACK_COMMAND,
         SKILLS_COMMAND,
+        CONDENSE_COMMAND,
       ].includes(command);
       if (!isSystemCommand) {
         onSubmit(message);
@@ -61,6 +79,24 @@ export function useSystemCommandInterceptor(
       }
 
       const anchorEventId = getLastRenderableEventId();
+
+      // @spec SC-005 — Conversation condensation
+      if (command === CONDENSE_COMMAND) {
+        condenseConversation(conversationId)
+          .then(() =>
+            displaySuccessToast(t(I18nKey.SLASH_COMMAND$CONDENSE_SUCCESS)),
+          )
+          .catch((error: unknown) => {
+            const status = getHttpStatus(error);
+            const message =
+              status !== undefined &&
+              CONDENSE_UNSUPPORTED_STATUS_CODES.has(status)
+                ? t(I18nKey.SLASH_COMMAND$CONDENSE_UNSUPPORTED)
+                : t(I18nKey.SLASH_COMMAND$CONDENSE_FAILED);
+            displayErrorToast(message);
+          });
+        return;
+      }
 
       // @spec SC-002 — Inline help
       if (command === HELP_COMMAND) {
